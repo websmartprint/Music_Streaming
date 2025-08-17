@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>LocalStream — Minimal, local-first music player</title>
+<style>
+  :root{
+    --accent:#B34A5A;       /* maroon */
+    --accent-2:#C65D6C;     /* maroon (hover) */
+    --bg:#0E0E0E;           /* near-black */
+    --card:#181818;
+    --text:#FFFFFF;
+    --muted:#B3B3B3;
+  }
+  *{box-sizing:border-box}
+  html,body{
+    margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family: system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.6;
+  }
+  a{color:inherit; text-decoration:none}
+  .container{width:min(1100px,90%); margin:0 auto}
+
+  /* ---- HERO ---- */
+  header.hero{
+    background: linear-gradient(180deg, var(--accent) 0%, var(--bg) 70%);
+    padding:72px 0 48px; position:relative; overflow:hidden;
+  }
+  header.hero::after{
+    content:""; position:absolute; inset:0;
+    background: radial-gradient(1200px 300px at 80% -30%, rgba(255,255,255,.06), transparent 60%);
+    mix-blend-mode:screen; pointer-events:none;
+  }
+  .brand{display:flex; align-items:center; gap:12px}
+  .brand h1{margin:0; font-size:clamp(28px,6vw,44px); letter-spacing:.4px}
+  .tagline{margin:.35rem 0 0; color:var(--muted)}
+  .badge{
+    display:inline-flex; align-items:center; gap:8px;
+    font-size:12px; color:var(--muted);
+    border:1px solid #2a2a2a; border-radius:999px; padding:6px 10px;
+    background:rgba(0,0,0,.15)
+  }
+  .hero-cta{margin-top:20px; display:flex; gap:12px; flex-wrap:wrap}
+  .btn{
+    display:inline-block; padding:12px 18px; border-radius:12px;
+    background:var(--accent); color:var(--text); border:1px solid transparent;
+    transition:transform .08s ease, background .2s ease;
+  }
+  .btn:hover{background:var(--accent-2); transform:translateY(-1px)}
+  .btn:active{transform:none}
+
+  /* ---- SECTIONS ---- */
+  section{padding:28px 0}
+  h2{margin:0 0 10px; font-size:clamp(22px,3.5vw,28px)}
+  .small{font-size:14px; color:var(--muted)}
+
+  .card-grid{
+    display:grid; gap:16px;
+    grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+    margin-top:12px;
+  }
+  .card{
+    background:var(--card); border:1px solid #242424;
+    border-radius:16px; padding:18px;
+  }
+  .card h3{margin:0 0 8px}
+
+  .code{
+    display:block; background:#0a0a0a; border:1px solid #222;
+    border-radius:10px; padding:12px 14px; overflow-x:auto;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    color:var(--muted)
+  }
+
+  /* ---- FOOTER ---- */
+  footer{border-top:1px solid #1f1f1f; padding:32px 0; font-size:14px; color:var(--muted)}
+
+  @media (prefers-reduced-motion:reduce){
+    .btn{transition:none}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="container">
+    <span class="badge">Fluss • open source</span>
+    <div class="brand" style="margin-top:10px;">
+      <h1>Fluss</h1>
+    </div>
+    <p class="tagline">Free Local Music</p>
+
+    <div class="hero-cta">
+      <a class="btn" href="https://github.com/websmartprint/Music_Streaming" target="_blank" rel="noopener">View on GitHub</a>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <section>
+    <h2>What is Fluss</h2>
+    <p>
+     Fluss is a free, open source music player that allows you to search, download, and play your favorite songs. Fluss aims to
+	emulate the feel of popular music streaming services while still giving you full control of your own music. All music is stored locally and is available
+	offline, no internet connection needed to enjoy your favorite playlists. To add music you can use the built-in search and download functionality, or add your own personal music files.
+    </p>
+  </section>
+
+  <section>
+    <h2>Features</h2>
+    <div class="card-grid">
+      <article class="card">
+        <h3>Search &amp; Download</h3>
+        <p>Search any song you like and our built in search function will find and download your music from online.</p>
+      </article>
+      <article class="card">
+        <h3>Local Filesystem Playlists</h3>
+        <p>Playlists are stored in local folders on your device. Add or remove tracks in the app, 
+	or for more control add your own music directly to the files themselves. </p>
+      </article>
+      <article class="card">
+        <h3>Playback Controls</h3>
+        <p>Play, pause, stop, skip, loop, and shuffle. With more quality of life features to come</p>
+      </article>
+    </div>
+  </section>
+
+  <section>
+    <h2>How to help</h2>
+    <p>Find any bugs, typos, or mistakes? Any features missing? Report issues through github so that we can dilver the smoothest listening experince possible. </p>
+  </section>
+</main>
+
+<footer>
+  <div class="container">© <span id="y"></span> Fluss • Open Source</div>
+</footer>
+
+<script>
+  document.getElementById('y').textContent = new Date().getFullYear();
+</script>
+</body>
+</html>

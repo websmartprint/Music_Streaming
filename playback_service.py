@@ -15,44 +15,55 @@ Portable VLC (Windows):
 """
 
 from __future__ import annotations
-import os
-import sys
-import threading
-import time
+import os, sys, threading, time
 from pathlib import Path
 from typing import Callable, Optional
 
-# Optional: point to a portable VLC folder on Windows (e.g., tools/vlc/)
-# Otherwise, leave vlc_dir=None and use a regular VLC install.
 def _prep_portable_vlc(vlc_dir: Optional[Path]) -> None:
+    """Prepare process for a portable VLC located in vlc_dir (Windows)."""
     if vlc_dir is None:
         return
     vlc_dir = Path(vlc_dir).resolve()
     if os.name == "nt":
-        # Make libvlc.dll discoverable
+        # Let Python find libvlc.dll / libvlccore.dll
         if hasattr(os, "add_dll_directory"):
             os.add_dll_directory(str(vlc_dir))
-        # Let VLC find its decoders
-        os.environ["VLC_PLUGIN_PATH"] = str(vlc_dir / "plugins")
+            os.add_dll_directory(str(vlc_dir / "plugins"))
+        # Let libVLC find its plugins (decoders etc.)
+        os.environ.setdefault("VLC_PLUGIN_PATH", str(vlc_dir / "plugins"))
 
 class PlaybackService:
     def __init__(self, vlc_dir: Optional[Path] = None) -> None:
         """
-        vlc_dir: path to a portable VLC folder (contains libvlc.dll, plugins/)
-                 e.g., Path("tools/vlc"). If None, uses system VLC.
+        vlc_dir: folder that contains libvlc.dll and a 'plugins' subfolder.
+                 If None, tries system-installed VLC.
+                 When packaged (PyInstaller), you can pass
+                   Path(getattr(sys, "_MEIPASS", Path(__file__).parent)) / "vlc"
         """
-        _prep_portable_vlc(vlc_dir)
+        # If caller didn't pass one, you can optionally auto-detect a bundled path:
+        if vlc_dir is None:
+            maybe_bundle = Path(getattr(sys, "_MEIPASS", Path(__file__).parent)) / "vlc"
+            if maybe_bundle.exists():
+                vlc_dir = maybe_bundle
+
+        _prep_portable_vlc(vlc_dir)  # <-- must run BEFORE importing vlc
 
         try:
-            import vlc  # lazy import so env is set first
+            import vlc  # lazy import so env & DLL dirs are set
         except Exception as e:
             raise RuntimeError(
                 "Failed to import python-vlc. Did you `pip install python-vlc` "
-                "and have VLC available (portable or system)?"
+                "and include VLC (portable or system)?"
             ) from e
+        
+        vlc_path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "third_party", "vlc-3.0.21-win64", "vlc-3.0.21")
+        )
+
+        instance = vlc.Instance("--plugin-path=" + os.path.join(vlc_path, "plugins"))
+        player = instance.media_player_new()
 
         self._vlc = vlc
-        # If using portable, reinforce plugin-path
         inst_args = ["--no-video"]
         if vlc_dir is not None:
             inst_args.append(f"--plugin-path={Path(vlc_dir) / 'plugins'}")

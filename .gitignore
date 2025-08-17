@@ -1,0 +1,22 @@
+# Git ignore rules
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+venv/
+.env/
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+
+# Build and dist
+build/
+dist/
+*.egg-info/
+
+#App files
+playlists/
+music/

@@ -2,18 +2,20 @@
 import yt_dlp
 import os
 
+#Downloads audio only, as .m4a or webm using youtube-dl
+#Returns full path as a string to the saved auido file
+#takes the url or query (as per youtube-dl peramaters) as  string, the output folder name as a string,
+#prefernce for the m4a filetype (bool), and a the option for a custom filename
+#If no output directroy is specified it will be saved to the music folder, if non exists it will create one
+#If no filename is specified, it will use youtube-dl's given name (usually just the youtube video name)
 def download_youtube_audio(url_or_query, output_dir="music", prefer_m4a=True, filename=None):
-    """
-    Download audio-only stream using yt-dlp.
-    - No ffmpeg required (no conversion).
-    - Result ext is usually .m4a (AAC) or .webm (Opus).
-    Returns the FULL PATH (string) to the downloaded file.
-    """
+
     os.makedirs(output_dir, exist_ok=True)
 
     # Prefer AAC in .m4a if available; else fall back to any bestaudio
     fmt = "bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio/best" if prefer_m4a else "bestaudio/best"
 
+    #Check directory
     outtmpl = os.path.join(output_dir, "%(title)s.%(ext)s")
     if filename:
         outtmpl = os.path.join(output_dir, f"{filename}.%(ext)s")
@@ -63,13 +65,22 @@ def download_youtube_audio(url_or_query, output_dir="music", prefer_m4a=True, fi
             ]
             if candidates:
                 candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
-                final_path = candidates[0]
+                final_path = candidates[0]        
 
         print(f"Downloaded audio: {final_path}")
-        return final_path  # <- return a string path
+        #Returns path as a string
+        return final_path  
+
+#Cleans up the song name so it diaplys more nicely in the GUI
+#Replaces spaces with underscores, removes leading and trailing spaces
+def clean_song_name(song_name: str) -> str:
+    return song_name.strip().replace(" ", "_")
 
 def make_yt_search(song_name):
     # Return the path so player.py can use it
-    return download_youtube_audio('ytsearch1:' + song_name.strip(),
-                                  output_dir="music",
-                                  filename=song_name)
+    #Crurrently accepts only name search, should modify to take link and name
+
+    if "http" in song_name:
+        return download_youtube_audio(song_name, output_dir="music", prefer_m4a=True)
+
+    return download_youtube_audio('ytsearch1:' + song_name.strip(), output_dir="music", prefer_m4a=True)# filename=song_name) <--- removed this, older version had filename as search query, not its the video name

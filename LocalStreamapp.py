@@ -1,5 +1,29 @@
-#!/usr/bin/env python3
-# gui_ctk.py — Spotify-ish GUI using customtkinter (light maroon + black)
+import os, sys
+from pathlib import Path
+
+def _app_base() -> Path:
+    # PyInstaller onefile -> _MEIPASS
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS)  # type: ignore[attr-defined]
+    # PyInstaller onedir -> folder containing the exe
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    # Plain Python
+    return Path(__file__).resolve().parent
+
+BASE = _app_base()
+
+# Point to your VLC bundle inside the app
+# (keep the same subfolder names you ship with your build)
+VLC_DIR = BASE / "third_party" / "vlc-3.0.21-win64" / "vlc-3.0.21"
+
+# Tell python-vlc where libvlc.dll is, and make DLL/plugins discoverable
+os.environ["PYTHON_VLC_LIB_PATH"] = str(VLC_DIR / "libvlc.dll")
+if os.name == "nt" and hasattr(os, "add_dll_directory"):
+    os.add_dll_directory(str(VLC_DIR))
+    os.add_dll_directory(str(VLC_DIR / "plugins"))
+os.environ.setdefault("VLC_PLUGIN_PATH", str(VLC_DIR / "plugins"))
+# ---- end VLC bootstrap ----
 
 import sys, threading, traceback
 from pathlib import Path
@@ -26,17 +50,38 @@ except Exception:
     print("Failed to import playback_service.py. Put it next to gui_ctk.py, then `pip install python-vlc`.")
     raise
 
-# --- Theme ---
-ACCENT = "#B34A5A"        # light maroon accent
+#Website themes
+#Control website colorscheme, fonts, etc
+#Use these for consitency
+APP_NAME = "Fluss"
+START_PAGE = "search"
+INIT_GEOMETRY = "900x360"
+INIT_MINISIZE_X = 760
+INIT_MINISIZE_Y = 320
+# Main color of website
+ACCENT = "#B34A5A"
+#lighter acent for active elements        
 ACCENT_HOVER = "#C65D6C"
-BG = "#0E0E0E"            # near-black background
-CARD_BG = "#181818"       # panels / rows
+# near-black background
+BG = "#0E0E0E"
+# panels / rows            
+CARD_BG = "#181818"
+#Text color       
 TEXT = "#FFFFFF"
+#For "deactivated" elemnts
 TEXT_MUTED = "#B3B3B3"
-FONT = "Segoe UI"  # default font for labels, buttons, etc.
+# default font for labels, buttons, etc.
+FONT = "Segoe UI"
+#Unsed, need to implenet, unevsal fint sizes for consistency
+SMALL_TEXT = 12
+MED_TITLE = 40
+LARGE_TITLE = 80  
 
+#Set window theme to match apps dark theme
 ctk.set_appearance_mode("dark")
 
+#customtkinter has no gradient function, this helper creates the gradient
+#function used in the titlecards of the app
 def paint_vertical_gradient(canvas: tk.Canvas, color1: str, color2: str):
     canvas.delete("all")
     w, h = int(canvas.winfo_width()), int(canvas.winfo_height())
@@ -53,27 +98,44 @@ def paint_vertical_gradient(canvas: tk.Canvas, color1: str, color2: str):
         bb = int(b1 + db * y) // 256
         canvas.create_line(0, y, w, y, fill=f"#{rr:02x}{gg:02x}{bb:02x}")
 
+#Main app graphics body, this controls all the visual and interactable elements, all later classes are utilized here
+#Structure its that the left Menu and the bottom music bar+controls are always on display
+#The remaining space is a 3x3 grid which can be used to "sink" or "raise" different windows
+# e.g. the playlists tab, search, playlist creation, etc. This is how you navigate different pages
+# These swappable pages are the later declared classes  
 class MusicGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Fluss")
-        self.geometry("900x360")
-        self.minsize(760, 320)
+        vlc_dir = Path(__file__).parent / "third_party" / "vlc-3.0.21-win64" / "vlc-3.0.21"
+        self.player = PlaybackService(vlc_dir=vlc_dir)
+        self.title(APP_NAME)
+        self.geometry(INIT_GEOMETRY)
+        self.minsize(INIT_MINISIZE_X, INIT_MINISIZE_Y)
         self.configure(fg_color=BG)
 
-        self.player = PlaybackService()
+        #self.player = PlaybackService()
 
-        # --- simple play queue state ---
+        # Play queue states used for playing a plylist
+        #playlist queue is a list of filepaths to play
         self.play_queue: list[Path] = []
+        #Queue index is used to cycle through the queue list
+        #starts at -1 since each call of playlist advances by 1, including first call
         self.queue_index: int = -1
+        #Shuffle mode is to save state between methods if we should iterate 
+        #sequentially or randomly through playlist queue
         self.shuffle_mode: bool = False
 
 
-        # State
+        # More states 
+        #current song path (used when not playing from a playlist, like from the search feature)
         self.current_path: Path | None = None
+        #Is a song currently playing
         self.playing = False
+        #Is the user moving the playbar cursor, helps not have conflict between drag and cursor advance
         self.user_dragging = False
+        #keept track of current page
         self.current_page_key: str | None = None
+        #maktes the page name to the class that actually creates page
         self.pages: dict[str, ctk.CTkFrame] = {}
 
         # 1) Layout frame/weights
@@ -99,7 +161,7 @@ class MusicGUI(ctk.CTk):
         # 6) Start progress loop
         self._start_progress_loop()
 
-    # ---------- Gradient helper (kept for future use if you add to a page) ----------
+    # Gradient helper (legacy, I dont think its used anymore)
     def _redraw_top_gradient(self):
         c = self.top_canvas
         c.delete("all")
@@ -114,25 +176,28 @@ class MusicGUI(ctk.CTk):
             bb = int(b1 + db * y) // 256
             c.create_line(0, y, w, y, fill=f"#{rr:02x}{gg:02x}{bb:02x}")
 
-    # ---------- UI ----------
+    # UI creation
     def _configure_grid(self):
-        # 4 columns total: [sidebar][content x3]
+        # 4 columns total: First is menure sidebar, rest is content [sidebar][content x3]
         self.grid_columnconfigure(0, weight=2)
         self.grid_columnconfigure(1, weight=4)
         self.grid_columnconfigure(2, weight=3)
         self.grid_columnconfigure(3, weight=4)
-        # rows: header | pages | pages | pages | footer
+        # rows: Top will always be title, bottom will be player, middle three will be content
+        #  Title | pages | pages | pages | Music player
         self.grid_rowconfigure(0, weight=0)
         self.grid_rowconfigure(1, weight=3)
         self.grid_rowconfigure(2, weight=3)
         self.grid_rowconfigure(3, weight=3)
         self.grid_rowconfigure(4, weight=0)
 
-    # ---- Filesystem playlists helpers ----
+    # --------Filesystem playlists helpers--------
+
     def _playlists_root(self) -> Path:
         # ROOT should already be defined at module top
         root = ROOT / "playlists"
-        root.mkdir(parents=True, exist_ok=True)   # ensure it exists
+        # ensure it exists
+        root.mkdir(parents=True, exist_ok=True) 
         return root
 
     def _list_playlists_fs(self) -> list[str]:
@@ -141,8 +206,9 @@ class MusicGUI(ctk.CTk):
         names.sort(key=str.casefold)
         return names
 
+    #Refreshes playlist sidebar so that when a
+    #new playlist is made it showes up in the sidebar menue
     def refresh_playlists_sidebar(self):
-        """Rebuild the dynamic list of playlist buttons in the sidebar."""
         for w in self.playlists_container.winfo_children():
             w.destroy()
 
@@ -162,8 +228,9 @@ class MusicGUI(ctk.CTk):
             )
             b.pack(fill="x", padx=8, pady=4)
 
+    #Helps display the songs inside of a playlist
+    #does this by going through the playlist and displaying all the filenames
     def show_playlist(self, name: str):
-        """Show a page that lists the files inside ./playlists/<name>."""
         key = f"playlist::{name}"
         page = self.pages.get(key)
 
@@ -173,7 +240,8 @@ class MusicGUI(ctk.CTk):
             page.grid(row=0, column=0, sticky="nsew")
             self.pages[key] = page
 
-        page.load_playlist(name)   # (re)populate the list
+        # (re)populate the list
+        page.load_playlist(name)  
         self.show_page(key)
 
     # --------- PlaybackService helpers ---------
@@ -261,11 +329,13 @@ class MusicGUI(ctk.CTk):
             "settings":  SettingsPage(self.page_container, app=self, fg_color=BG),
         }
         for p in self.pages.values():
-            p.grid(row=0, column=0, sticky="nsew")  # stacked in same cell
-        self.show_page("search")  # default page
+            # stacked in same cell
+            p.grid(row=0, column=0, sticky="nsew") 
+        # default page
+        self.show_page(START_PAGE) 
 
-    def show_page(self, key: str):  # ★ NEW
-        """Raise the target page; call lifecycle hooks."""
+    def show_page(self, key: str):  
+        #Raise the target page; call lifecycle hooks
         if key not in self.pages:
             return
         if self.current_page_key and self.current_page_key != key:
@@ -296,7 +366,7 @@ class MusicGUI(ctk.CTk):
         # row 0: static buttons
         # row 1: "Playlists" label
         # row 2: dynamic playlist buttons (in a simple frame)
-        self.menu_frame.grid_rowconfigure(2, weight=1)  # let the list area expand
+        self.menu_frame.grid_rowconfigure(2, weight=1)  
         self.menu_frame.grid_columnconfigure(0, weight=1)
 
         # --- Static section ---
@@ -313,7 +383,7 @@ class MusicGUI(ctk.CTk):
         btn_search.grid(row=0, column=0, sticky="ew", pady=(0, 6))
 
         btn_settings = ctk.CTkButton(
-            static_box, text="Create Playlist",
+            static_box, text="Manage Playlists",
             command=lambda: self.show_page("make playlist"),
             fg_color=ACCENT, hover_color=ACCENT_HOVER,
             text_color=TEXT, corner_radius=18, height=36
@@ -325,14 +395,13 @@ class MusicGUI(ctk.CTk):
         lbl.grid(row=1, column=0, sticky="w", padx=12, pady=(6, 4))
 
         # --- Dynamic playlist buttons container ---
-        # (You can swap for CTkScrollableFrame if you expect many)
         self.playlists_container = ctk.CTkFrame(self.menu_frame, fg_color="transparent")
         self.playlists_container.grid(row=2, column=0, sticky="nsew", padx=4, pady=(0, 8))
 
         # build initial list
         self.refresh_playlists_sidebar()
 
-    # --------- Footer (music bar) ----------
+    # --------- Music bar (bottom) ----------
     def _build_music_bar(self):
         self.music_bar = ctk.CTkFrame(self, fg_color=BG)
         self.music_bar.grid(row=4, column=1, columnspan=3, sticky="nsew", padx=18, pady=14)
@@ -393,10 +462,10 @@ class MusicGUI(ctk.CTk):
 
     # --------- Events / actions ----------
     def _wire_events(self):
-        # Enter triggers play only if we're on the Search page ★ NEW
+        # Enter triggers play only if we're on the Search page
         def on_return(_e):
             if self.current_page_key == "search":
-                page: SearchPage = self.pages["search"]  # type: ignore
+                page: SearchPage = self.pages["search"]
                 try:
                     q = page.entry.get().strip()
                 except Exception:
@@ -597,7 +666,8 @@ class MusicGUI(ctk.CTk):
 
     # ---------- Enable / Disable ----------
     def _disable_controls(self):
-        # We only disable footer controls here; Search controls live on the page
+        # Do enable in diable control buttons, also give visual que (grey out)
+        #used while doanloading song
         self.pause_btn.configure(state="disabled")
         self.stop_btn.configure(state="disabled")
         self.skip_btn.configure(state="disabled")
@@ -624,12 +694,18 @@ class SearchPage(Page):
         super().__init__(parent, **kwargs)
         self.app = app
 
-        # --- Page grid: 3 columns (weights 4, 3, 4) + rows (0=gradient, 1=content) ---
-        self.grid_columnconfigure(0, weight=4)
-        self.grid_columnconfigure(1, weight=3)   # center column (search/tools live here)
+        # --- Page grid ---
+
+        #Contains title
+        self.grid_columnconfigure(0, weight=4) 
+        #Search tool is here, has lower stretch weight as to restrict search bar length
+        self.grid_columnconfigure(1, weight=3) 
         self.grid_columnconfigure(2, weight=4)
-        self.grid_rowconfigure(0, weight=1)     
-        self.grid_rowconfigure(1, weight=1)      # main content grows
+
+        #Top row has title
+        self.grid_rowconfigure(0, weight=1)
+        #Search tools and buttons live here     
+        self.grid_rowconfigure(1, weight=1)  
 
         # --- Row 0: gradient spanning all columns ---
         grad_frame = ctk.CTkFrame(self, fg_color=BG, corner_radius=8)
@@ -648,8 +724,8 @@ class SearchPage(Page):
             if w <= 0 or h <= 0:
                 return
 
-            # 1) redraw gradient ONLY (don't nuke the text)
-            c.delete("grad")
+            # 1) redraw gradient ONLY, written this way to preserve text above grad
+            c.delete("grad") 
             r1, g1, b1 = c.winfo_rgb(ACCENT)
             r2, g2, b2 = c.winfo_rgb(BG)
             dr = (r2 - r1) / max(1, h)
@@ -662,17 +738,16 @@ class SearchPage(Page):
                 c.create_line(0, y, w, y, fill=f"#{rr:02x}{gg:02x}{bb:02x}", tags=("grad",))
 
             # 2) ensure title exists, using the CURRENT title text
-            # place roughly centered vertically (h*0.5) and with 12px left margin
             y = max(10, min(h - 10, int(h * 0.6)))
             x = 12
             if self.title_item is None:
                 self.title_item = c.create_text(
                     x, y, text=self._title_text, fill=TEXT,
-                    font=(FONT, 80, "bold"), anchor="w"
+                    font=(FONT, LARGE_TITLE, "bold"), anchor="w"
                 )
             else:
                 # keep its y aligned on resize and text unchanged here
-                c.coords(self.title_item, 12, y)
+                c.coords(self.title_item, x, y)
                 c.tag_raise(self.title_item)
 
         self.grad_canvas.bind("<Configure>", _paint)
@@ -751,7 +826,7 @@ class LibraryPage(Page):
         ctk.CTkLabel(self, text="Library (TODO)", font=(FONT, 16, "bold")).pack(pady=12)
 
 class MakePlayList(Page):
-    """Page to create a new playlist as a folder in ./playlists/<name>."""
+    """Page to create and manage playlists (folders in ./playlists/<name>)."""
     def __init__(self, parent, app, **kwargs):
         super().__init__(parent, **kwargs)
         self.app = app
@@ -760,30 +835,27 @@ class MakePlayList(Page):
         self.grid_columnconfigure(0, weight=4)
         self.grid_columnconfigure(1, weight=3)
         self.grid_columnconfigure(2, weight=4)
-        # rows: 0 = gradient (fixed-ish), 1 = header, 2 = form, 3 = hint/fill
-        self.grid_rowconfigure(0, weight=1)   # <-- fixed height
+        # rows: 0 = gradient, 1 = form row, 2 = list row
+        self.grid_rowconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
         self.grid_rowconfigure(2, weight=1)
-        self.grid_rowconfigure(3, weight=1)   # filler grows
 
-        # --- Row 0: gradient spanning all columns ---
+        # --- Row 0: gradient ---
         grad_frame = ctk.CTkFrame(self, fg_color=BG, corner_radius=8)
         grad_frame.grid(row=0, column=0, columnspan=3, sticky="nsew", padx=0, pady=(0, 10))
 
         self.grad_canvas = tk.Canvas(grad_frame, height=90, highlightthickness=0, bd=0)
         self.grad_canvas.pack(fill="both", expand=True)
 
-        # keep the "current" title here; load_playlist updates it
-        self._title_text = "Create Playlist"
-        self.title_item = None  # canvas item id (int) or None
+        self._title_text = "Manage Playlists"
+        self.title_item = None
 
         def _paint(_evt=None):
             c = self.grad_canvas
             w, h = int(c.winfo_width()), int(c.winfo_height())
             if w <= 0 or h <= 0:
                 return
-
-            # 1) redraw gradient ONLY (don't nuke the text)
+            # gradient only
             c.delete("grad")
             r1, g1, b1 = c.winfo_rgb(ACCENT)
             r2, g2, b2 = c.winfo_rgb(BG)
@@ -795,51 +867,72 @@ class MakePlayList(Page):
                 gg = int(g1 + dg*y) // 256
                 bb = int(b1 + db*y) // 256
                 c.create_line(0, y, w, y, fill=f"#{rr:02x}{gg:02x}{bb:02x}", tags=("grad",))
-
-            # 2) ensure title exists, using the CURRENT title text
-            # place roughly centered vertically (h*0.5) and with 12px left margin
+            # title (center-ish vertically)
             y = max(10, min(h - 10, int(h * 0.6)))
-            x = 12
             if self.title_item is None:
                 self.title_item = c.create_text(
-                    x, y, text=self._title_text, fill=TEXT,
+                    12, y, text=self._title_text, fill=TEXT,
                     font=(FONT, 60, "bold"), anchor="w"
                 )
             else:
-                # keep its y aligned on resize and text unchanged here
                 c.coords(self.title_item, 12, y)
                 c.tag_raise(self.title_item)
 
         self.grad_canvas.bind("<Configure>", _paint)
 
-        # --- Row 1: form (entry + button) in the center column ---
-        row = ctk.CTkFrame(self, fg_color=BG)
-        row.grid(row=1, column=1, sticky="ew", padx=0, pady=(0, 10))
-        row.grid_columnconfigure(0, weight=1)
+        # --- Row 1: create form (entry + button) ---
+        form = ctk.CTkFrame(self, fg_color=BG)
+        form.grid(row=1, column=1, sticky="ew", padx=0, pady=(0, 10))
+        form.grid_columnconfigure(0, weight=1)
 
         self.name_entry = ctk.CTkEntry(
-            row, placeholder_text="Playlist name…",
+            form, placeholder_text="New playlist name…",
             height=36, corner_radius=14, fg_color=CARD_BG,
             border_color=ACCENT, border_width=1, text_color=TEXT
         )
-        self.name_entry.grid(row=0, column=0, sticky="new")
+        self.name_entry.grid(row=0, column=0, sticky="ew")
 
         create_btn = ctk.CTkButton(
-            row, text="Create",
+            form, text="Create",
             command=self._create_playlist,
             fg_color=ACCENT, hover_color=ACCENT_HOVER,
             text_color=TEXT, corner_radius=14, width=90, height=36
         )
         create_btn.grid(row=0, column=1, padx=(10, 0))
 
-        self.hint = ctk.CTkLabel(
+        hint = ctk.CTkLabel(
             self,
-            text="Playlists will be created in the 'playlists' folder next to the app.",
+            text="Playlists are folders in the 'playlists' directory next to the app.",
             text_color=TEXT_MUTED, font=(FONT, 11)
         )
-        self.hint.grid(row=1, column=0, columnspan=3, sticky="swe", padx=2, pady=(0, 0))
+        hint.grid(row=1, column=0, columnspan=3, sticky="swe", padx=2, pady=(6, 0))
 
-    # --- helpers ---
+        # --- Row 2: playlists list (with optional scrollbar) ---
+        list_frame = ctk.CTkFrame(self, fg_color=BG)
+        list_frame.grid(row=2, column=0, columnspan=3, sticky="nsew", padx=0, pady=(0, 0))
+        list_frame.grid_rowconfigure(0, weight=1)
+        list_frame.grid_columnconfigure(0, weight=1)
+
+        self.pl_listbox = tk.Listbox(
+            list_frame, bg=BG, fg=TEXT, font=(FONT, 24, "bold"),
+            selectbackground="#333333", highlightthickness=0, bd=0, activestyle="none"
+        )
+        self.pl_listbox.grid(row=0, column=0, sticky="nsew")
+
+        # Scrollbar (visible—remove if you want hidden behavior)
+        sb = tk.Scrollbar(list_frame, command=self.pl_listbox.yview)
+        sb.grid(row=0, column=1, sticky="ns")
+        self.pl_listbox.config(yscrollcommand=sb.set)
+
+        # Bind delete/backspace and double-click to open
+        self.pl_listbox.bind("<Delete>", lambda _e: self._delete_selected_playlists())
+        self.pl_listbox.bind("<BackSpace>", lambda _e: self._delete_selected_playlists())
+        self.pl_listbox.bind("<Double-Button-1>", self._open_selected_playlist)
+
+        # initial load
+        self.refresh_list()
+
+    # -------- helpers --------
     def _playlists_root(self) -> Path:
         return ROOT / "playlists"
 
@@ -849,13 +942,27 @@ class MakePlayList(Page):
         cleaned = cleaned.strip().rstrip(".")
         return cleaned
 
-    # --- actions ---
+    def refresh_list(self):
+        """Reload the list of playlist folders."""
+        root = self._playlists_root()
+        root.mkdir(parents=True, exist_ok=True)
+        self.pl_listbox.delete(0, tk.END)
+
+        names = sorted([p.name for p in root.iterdir() if p.is_dir()], key=str.casefold)
+        if not names:
+            self.pl_listbox.insert(tk.END, "(no playlists)")
+            self.pl_listbox.configure(state="disabled")
+        else:
+            self.pl_listbox.configure(state="normal")
+            for n in names:
+                self.pl_listbox.insert(tk.END, n)
+
+    # -------- actions --------
     def _create_playlist(self):
         raw = self.name_entry.get().strip()
         if not raw:
             messagebox.showinfo("Create Playlist", "Please type a playlist name.")
             return
-
         safe = self._safe_name(raw)
         if not safe:
             messagebox.showerror("Create Playlist", "That name is not valid after sanitizing. Try another.")
@@ -880,9 +987,75 @@ class MakePlayList(Page):
             return
 
         self.name_entry.delete(0, tk.END)
-        # refresh your sidebar if you have that method:
+        self.refresh_list()
         if hasattr(self.app, "refresh_playlists_sidebar"):
             self.app.refresh_playlists_sidebar()
+
+    def _delete_selected_playlists(self):
+        """Delete selected playlist folders (with confirmation)."""
+        sel = list(self.pl_listbox.curselection())
+        if not sel:
+            messagebox.showinfo("Delete", "Select one or more playlists to delete.")
+            return
+
+        # if the list is disabled because it's empty placeholder, do nothing
+        if str(self.pl_listbox.cget("state")) == "disabled":
+            return
+
+        names = [self.pl_listbox.get(i) for i in sel]
+        if not messagebox.askyesno("Delete", f"Delete {len(names)} playlist folder(s)?\n\n" +
+                                   "\n".join(names)):
+            return
+
+        root = self._playlists_root()
+        errors = []
+        import shutil
+
+        for name in names:
+            folder = root / name
+            try:
+                # If current play queue comes from this folder, stop playback and clear queue
+                if getattr(self.app, "play_queue", None):
+                    # Remove any queued items from this folder
+                    self.app.play_queue = [p for p in self.app.play_queue if p.resolve().parent != folder.resolve()]
+                    if getattr(self.app, "queue_index", -1) >= len(self.app.play_queue):
+                        self.app.queue_index = len(self.app.play_queue) - 1
+                # If currently playing file is inside the folder, stop
+                cur = getattr(self.app, "current_path", None)
+                if cur and cur.resolve().parents and folder.resolve() in cur.resolve().parents:
+                    self.app.on_stop_clicked()
+
+                # Delete the folder (even if not empty)
+                if folder.exists() and folder.is_dir():
+                    shutil.rmtree(folder)
+            except Exception as e:
+                errors.append(f"{name}: {e}")
+
+        if errors:
+            messagebox.showerror("Delete", "Some playlists could not be deleted:\n" + "\n".join(errors))
+        else:
+            messagebox.showinfo("Delete", "Deleted.")
+
+        self.refresh_list()
+        if hasattr(self.app, "refresh_playlists_sidebar"):
+            self.app.refresh_playlists_sidebar()
+
+    def _open_selected_playlist(self, _e=None):
+        """Double-click behavior: open the selected playlist page."""
+        sel = list(self.pl_listbox.curselection())
+        if not sel:
+            return
+        name = self.pl_listbox.get(sel[0])
+        # ignore placeholder row
+        if name.strip() == "(no playlists)":
+            return
+        if hasattr(self.app, "show_playlist"):
+            self.app.show_playlist(name)
+
+    # If your router calls on_show/on_hide, auto-refresh when entering the page.
+    def on_show(self):
+        self.refresh_list()
+
 
 
 
@@ -997,10 +1170,10 @@ class PlaylistViewPage(Page):
         self.grid_columnconfigure(1, weight=3)
         self.grid_columnconfigure(2, weight=4)
         # rows: 0 = gradient (fixed-ish), 1 = header, 2 = form, 3 = hint/fill
-        self.grid_rowconfigure(0, weight=1)   # <-- fixed height
+        self.grid_rowconfigure(0, weight=1)  
         self.grid_rowconfigure(1, weight=0)
         self.grid_rowconfigure(2, weight=1)
-        self.grid_rowconfigure(3, weight=1)   # filler grows
+        self.grid_rowconfigure(3, weight=1)  
 
         # --- Row 0: gradient spanning all columns ---
         grad_frame = ctk.CTkFrame(self, fg_color=BG, corner_radius=8)
@@ -1070,9 +1243,9 @@ class PlaylistViewPage(Page):
         mid_col.grid_columnconfigure(0, weight=1)
         mid_col.grid_rowconfigure(0, weight=0)   # search row
         mid_col.grid_rowconfigure(1, weight=0)   # tools row
-        mid_col.grid_rowconfigure(2, weight=1)   # spacer (pushes content up)
+        mid_col.grid_rowconfigure(2, weight=1)   # spacer 
 
-        # --- Middle column: SEARCH (row 0) ---
+        # ----- top
         rail = ctk.CTkFrame(mid_col, fg_color=BG)
         rail.grid(row=0, column=0, sticky="ew", pady=(8, 10))
         rail.grid_columnconfigure(0, weight=1)
