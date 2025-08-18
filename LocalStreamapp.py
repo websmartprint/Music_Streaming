@@ -1,28 +1,19 @@
 import os, sys
 from pathlib import Path
 
-def _app_base() -> Path:
-    # PyInstaller onefile -> _MEIPASS
-    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        return Path(sys._MEIPASS)  # type: ignore[attr-defined]
-    # PyInstaller onedir -> folder containing the exe
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).parent
-    # Plain Python
-    return Path(__file__).resolve().parent
+if getattr(sys, 'frozen', False):
+    # Running from bundled exe
+    base_dir = Path(sys._MEIPASS)
+else:
+    # Running in normal Python
+    base_dir = Path(__file__).parent
 
-BASE = _app_base()
-
-# Point to your VLC bundle inside the app
-# (keep the same subfolder names you ship with your build)
-VLC_DIR = BASE / "third_party" / "vlc-3.0.21-win64" / "vlc-3.0.21"
-
-# Tell python-vlc where libvlc.dll is, and make DLL/plugins discoverable
-os.environ["PYTHON_VLC_LIB_PATH"] = str(VLC_DIR / "libvlc.dll")
+vlc_dir = base_dir / "third_party" / "vlc-3.0.21-win64" / "vlc-3.0.21"
+os.environ["PYTHON_VLC_LIB_PATH"] = str(vlc_dir / "libvlc.dll")
 if os.name == "nt" and hasattr(os, "add_dll_directory"):
-    os.add_dll_directory(str(VLC_DIR))
-    os.add_dll_directory(str(VLC_DIR / "plugins"))
-os.environ.setdefault("VLC_PLUGIN_PATH", str(VLC_DIR / "plugins"))
+    os.add_dll_directory(str(vlc_dir))
+    os.add_dll_directory(str(vlc_dir / "plugins"))
+os.environ.setdefault("VLC_PLUGIN_PATH", str(vlc_dir / "plugins"))
 # ---- end VLC bootstrap ----
 
 import sys, threading, traceback
@@ -801,7 +792,6 @@ class SearchPage(Page):
         download_btn.grid(row=0, column=2, padx=(10, 0))
 
         # --- Middle column: (optional) TOOLS (row 1) ---
-        # If you want to add the “add to playlist” UI later, put it here.
         # tools = ctk.CTkFrame(mid_col, fg_color=BG)
         # tools.grid(row=1, column=0, sticky="ew", padx=0, pady=(8, 0))
         # tools.grid_columnconfigure(0, weight=1)

@@ -5,7 +5,9 @@ a = Analysis(
     ['LocalStreamapp.py'],
     pathex=[],
     binaries=[],
-    datas=[('third_party', 'third_party')],
+    datas=[
+        ('third_party/vlc-3.0.21-win64/vlc-3.0.21', 'third_party/vlc-3.0.21-win64/vlc-3.0.21'),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
