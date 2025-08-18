@@ -64,6 +64,27 @@ def fetch_with_fetcher(song_name: str) -> Path:
 
 
 # ---------- NEW: pure resolve method (no playback) ----------
+def download_youtube_video(url_or_query, output_dir="videos", filename=None):
+    import yt_dlp
+    import os
+
+    os.makedirs(output_dir, exist_ok=True)
+    outtmpl = os.path.join(output_dir, "%(title)s.%(ext)s")
+    if filename:
+        outtmpl = os.path.join(output_dir, filename)
+
+    ydl_opts = {
+        "format": "best[ext=mp4]/best",  # Only download mp4 if available, else best available
+        "outtmpl": outtmpl,
+        "noplaylist": True,
+        "quiet": False,
+        "restrictfilenames": True,
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        result = ydl.download([url_or_query])
+    return outtmpl  # Returns the intended output path
+
 def find_or_download(song_name: str) -> Path:
     """
     Return a local Path for `song_name`. If not present, download it.
