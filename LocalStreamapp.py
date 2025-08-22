@@ -63,7 +63,7 @@ TEXT = "#FFFFFF"
 TEXT_MUTED = "#B3B3B3"
 # default font for labels, buttons, etc.
 FONT = "Segoe UI"
-#Unsed, need to implenet, unevsal fint sizes for consistency
+#Unused, need to implement, universal font sizes for consistency
 SMALL_TEXT = 12
 MED_TITLE = 40
 LARGE_TITLE = 80  
@@ -280,7 +280,7 @@ class MusicGUI(ctk.CTk):
             messagebox.showerror("Fluss", f"Folder not found:\n{folder}")
             return
 
-        # collect playable files (tweak extensions as you like)
+        # collect playable files 
         exts = {".mp3", ".m4a", ".mp4", ".webm", ".opus", ".wav", ".flac"}
         files = sorted(
             [p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in exts],
